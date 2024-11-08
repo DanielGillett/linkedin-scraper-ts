@@ -52,7 +52,7 @@ export class LinkedInService {
       ]);
 
       // Wait for job listings to load
-      await this.page.waitForSelector('.scaffold-layout__list-container');
+      await this.page.waitForSelector('.jobs-search-results-list');
       await delay(2000); // Allow time for dynamic content to load
 
       // Scroll through the job list to load all jobs
@@ -94,27 +94,20 @@ export class LinkedInService {
       while (previousHeight !== currentHeight) {
         previousHeight = currentHeight;
         
-        await this.page.evaluate((selector, scrollHeight) => {
+        await this.page.evaluate((selector) => {
           const element = document.querySelector(selector);
-          if (element) element.scrollTo(0, scrollHeight);
-        }, listContainer, currentHeight);
+          if (element) {
+            element.scrollTo(0, element.scrollHeight);
+          }
+        }, listContainer);
         
-        await delay(1000); // Wait for new content to load
+        await delay(1500); // Increased delay to ensure content loads
         
         currentHeight = await this.page.evaluate(() => {
           const element = document.querySelector('.jobs-search-results-list');
           return element?.scrollHeight || 0;
         });
       }
-
-      // Scroll back to top
-      await this.page.evaluate((selector) => {
-        const element = document.querySelector(selector);
-        if (element) element.scrollTo(0, 0);
-      }, listContainer);
-      
-      await delay(500);
-      
     } catch (error) {
       logger.error(`Failed to scroll job list: ${error}`);
     }
@@ -124,24 +117,32 @@ export class LinkedInService {
     return this.page.evaluate(() => {
       const jobCards = document.querySelectorAll('.jobs-search-results__list-item');
       return Array.from(jobCards).map(card => {
+        // Updated selectors to match current LinkedIn structure
         const titleEl = card.querySelector('.job-card-list__title');
-        const companyEl = card.querySelector('.job-card-container__company-name');
+        const companyEl = card.querySelector('.job-card-container__primary-description');
         const locationEl = card.querySelector('.job-card-container__metadata-item');
-        const salaryEl = card.querySelector('.job-card-container__salary-info');
-        const jobTypeEl = card.querySelector('.job-card-container__workplace-type');
+        const salaryEl = card.querySelector('.job-card-container__metadata-item--salary');
+        const jobTypeEl = card.querySelector('.job-card-container__metadata-item--workplace-type');
         const postedEl = card.querySelector('time');
         const linkEl = card.querySelector('.job-card-list__title');
 
+        // Clean up the title text by removing duplicate text
+        const rawTitle = titleEl?.textContent?.trim() || '';
+        const title = rawTitle.split(rawTitle)[0]; // Remove duplicates
+
+        // Clean up the company name
+        const company = companyEl?.textContent?.trim().replace(/\s+/g, ' ') || '';
+
         return {
-          title: titleEl?.textContent?.trim() || '',
-          company: companyEl?.textContent?.trim() || '',
+          title,
+          company,
           location: locationEl?.textContent?.trim() || '',
           salary: salaryEl?.textContent?.trim() || undefined,
           jobType: jobTypeEl?.textContent?.trim() || undefined,
           link: (linkEl as HTMLAnchorElement)?.href || '',
           postedDate: postedEl?.getAttribute('datetime') || undefined
         };
-      });
+      }).filter(job => job.title && job.company); // Only return jobs with at least a title and company
     });
   }
 
